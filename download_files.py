@@ -2,18 +2,43 @@
 # -*- coding: utf-8 -*-
 import argparse
 import time
+from urllib.request import ProxyHandler
+
+import requests
+
+
+def get_proxy():
+    data = requests.get("http://127.0.0.1:5010/get/").json()
+    if data['proxy']:
+        return {'http': 'http://' + data['proxy']}, data['proxy']
+    else:
+        return None
+
+
+def delete_proxy(proxy):
+    requests.get("http://127.0.0.1:5010/delete/?proxy={}".format(proxy))
+
 
 try:
     from cookielib import CookieJar
+
     cj = CookieJar()
     import urllib2
+
+    proxies, prox = get_proxy()
+    proxy = ProxyHandler(proxies)
     opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cj))
     import urllib
+
     urlretrieve = urllib.urlretrieve
 except ImportError:
     import http.cookiejar
+
     cj = http.cookiejar.CookieJar()
     import urllib
+
+    proxies, prox = get_proxy()
+    proxy = ProxyHandler(proxies)
     opener = urllib.request.build_opener(
         urllib.request.HTTPCookieProcessor(cj))
     urlretrieve = urllib.request.urlretrieve
@@ -36,6 +61,14 @@ parser.add_argument('--list-path', '--list', type=str, required=True)
 parser.add_argument('--trash-bad-count', action='store_true', default=False)
 args = parser.parse_args()
 
+HEADERS = {
+    "Accept": "image/gif, image/jpeg, image/pjpeg, application/x-ms-application, application/xaml+xml, application/x-ms-xbap, */*",
+    "Accept-Encoding": "gzip, deflate",
+    "Accept-Language": "zh-Hans-CN,zh-Hans;q=0.8,en-US;q=0.5,en;q=0.3",
+    "Host": "httpbin.org",
+    "User-Agent": "Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 10.0; WOW64; Trident/7.0; .NET4.0C; .NET4.0E; Tablet PC 2.0; wbx 1.0.0; wbxapp 1.0.0; Zoom 3.6.0)",
+    "X-Amzn-Trace-Id": "Root=1-628b672d-4d6de7f34d15a77960784504"
+}
 
 def write_txt(txt, out_path, num_words=None):
     # occasionally, some epubs text are decoded with errors
@@ -57,7 +90,7 @@ def main():
         os.makedirs(out_dir)
     filelist_path = args.list_path
 
-    lines = list(open(filelist_path, encoding='utf8').readlines())
+    lines = list(open(filelist_path, encoding='utf16').readlines())
 
     done_files = set([os.path.split(path)[-1]
                       for path in glob(os.path.join(out_dir, '*.txt'))])
@@ -67,6 +100,7 @@ def main():
     for i, line in enumerate(ProgressBar()(lines)):
         if not line.strip():
             continue
+        proxies, proxy = get_proxy()
         # read data
         try:
             # {"page": "https://www.smashwords.com/books/view/52",
@@ -89,7 +123,8 @@ def main():
                 # try to download .txt file
                 for try_count in range(MAX_OPEN_COUNT):
                     try:
-                        response = opener.open(data['txt'])
+                        # response = opener.open(data['txt'])
+                        response = requests.get(data['txt'], headers=HEADERS, proxies=proxies, stream=True)
                         if try_count >= 1:
                             sys.stderr.write(
                                 'Succeeded in opening {}\n'.format(data['txt']))
@@ -102,16 +137,23 @@ def main():
                             '{}: {}\n'.format(type(e).__name__, str(e)))
                         time.sleep(RETRY_SLEEP_SEC)
                 else:
+                    delete_proxy(proxy)
                     sys.stderr.write(
                         ' Gave up to open {}\n'.format(data['txt']))
-                txt = response.read().decode('utf-8', 'ignore')
+                # txt = response.read().decode('utf-8', 'ignore')
+                txt = response.text
                 write_txt(txt, out_path, None)
             else:
                 # revenge by converting .epub to .txt
                 tmp_path = os.path.join(out_dir, file_name)
                 for try_count in range(MAX_OPEN_COUNT):
                     try:
-                        urlretrieve(data['epub'], tmp_path)  # download epub
+                        # urllib.request.urlretrieve(data['epub'], tmp_path)
+                        res = requests.get(data['epub'], headers=HEADERS, proxies=proxies, allow_redirects=True, stream=True)
+                        with open(tmp_path, 'wb') as f:
+                            f.write(res.content)
+                            f.close()
+                        # urlretrieve(data['epub'], tmp_path)  # download epub
                         if try_count >= 1:
                             sys.stderr.write(
                                 'Succeeded in opening {}\n'.format(data['epub']))
@@ -124,6 +166,7 @@ def main():
                             '{}: {}\n'.format(type(e).__name__, str(e)))
                         time.sleep(RETRY_SLEEP_SEC)
                 else:
+                    delete_proxy(proxy)
                     sys.stderr.write(
                         ' Gave up to open {}\n'.format(data['epub']))
                 txt = epub2txt.epub2txt(tmp_path).convert()

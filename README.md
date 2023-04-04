@@ -75,7 +75,7 @@ pip install -r requirements.txt
 
 ## Note on Errors
 
-- It is expected some error messages are shown, e.g., `Failed: epub and txt`, `File is not a zip file`(means that you need to login to access the resources) or `Failed to open`. But, the number of failures will be much less than one of successes. Don't worry.
+- It is expected some error messages are shown, e.g., `Failed: epub and txt`, `File is not a zip file`(means that you need to login to get access to the resources) or `Failed to open`. But, the number of failures will be much less than one of successes. Don't worry.
 
 ## Acknowledgement
 
